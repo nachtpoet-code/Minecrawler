@@ -25,6 +25,9 @@ const Game = {
     // Long Press für Markierung
     longPressTimer: null,
     longPressDelay: 500,
+    longPressTriggered: false,
+    lastTouchTime: 0,
+    touchStartPos: { x: 0, y: 0 },
 
     // Difficulty scaling
     baseEnemyDensity: 0.15,
@@ -88,8 +91,12 @@ const Game = {
     },
 
     setupEventListeners() {
-        // Click auf Canvas
-        this.canvas.addEventListener('click', (e) => this.handleClick(e));
+        // Click auf Canvas (nur für Desktop)
+        this.canvas.addEventListener('click', (e) => {
+            // Ignorieren wenn Touch-Gerät (touch events übernehmen)
+            if (this.lastTouchTime && Date.now() - this.lastTouchTime < 500) return;
+            this.handleClick(e);
+        });
 
         // Rechtsklick für Markierung
         this.canvas.addEventListener('contextmenu', (e) => {
@@ -99,22 +106,41 @@ const Game = {
 
         // Touch Events für Long Press
         this.canvas.addEventListener('touchstart', (e) => {
+            e.preventDefault(); // Verhindert Ghost-Clicks
+            this.lastTouchTime = Date.now();
+            this.longPressTriggered = false;
             const touch = e.touches[0];
+            this.touchStartPos = { x: touch.clientX, y: touch.clientY };
             this.startLongPress(touch);
-        });
+        }, { passive: false });
+
         this.canvas.addEventListener('touchend', (e) => {
             e.preventDefault();
+            this.lastTouchTime = Date.now();
+
             if (this.longPressTimer) {
                 clearTimeout(this.longPressTimer);
                 this.longPressTimer = null;
+            }
+
+            // Nur Click ausführen wenn kein Long Press war
+            if (!this.longPressTriggered) {
                 const touch = e.changedTouches[0];
                 this.handleClick(touch);
             }
-        });
-        this.canvas.addEventListener('touchmove', () => {
+            this.longPressTriggered = false;
+        }, { passive: false });
+
+        this.canvas.addEventListener('touchmove', (e) => {
+            // Long Press abbrechen wenn Finger bewegt wird
             if (this.longPressTimer) {
-                clearTimeout(this.longPressTimer);
-                this.longPressTimer = null;
+                const touch = e.touches[0];
+                const dx = Math.abs(touch.clientX - this.touchStartPos.x);
+                const dy = Math.abs(touch.clientY - this.touchStartPos.y);
+                if (dx > 10 || dy > 10) {
+                    clearTimeout(this.longPressTimer);
+                    this.longPressTimer = null;
+                }
             }
         });
 
@@ -135,6 +161,7 @@ const Game = {
         const y = Math.floor((touch.clientY - rect.top) / this.cellSize);
 
         this.longPressTimer = setTimeout(() => {
+            this.longPressTriggered = true;
             this.toggleFlag(x, y);
             this.longPressTimer = null;
         }, this.longPressDelay);
