@@ -153,6 +153,9 @@ const Game = {
         this.player.x = x;
         this.player.y = y;
 
+        // Nachbarfelder aufdecken
+        this.revealAroundPlayer();
+
         // Ziel erreicht?
         if (this.isGoal(x, y)) {
             this.levelComplete = true;
@@ -218,9 +221,6 @@ const Game = {
             }
         }
 
-        // Startfeld aufdecken
-        this.grid[this.player.y][this.player.x].revealed = true;
-
         // Feinde platzieren
         const enemyDensity = this.baseEnemyDensity + (this.level - 1) * 0.02;
         const totalCells = this.cols * this.rows;
@@ -231,12 +231,13 @@ const Game = {
             const x = Math.floor(Math.random() * this.cols);
             const y = Math.floor(Math.random() * this.rows);
 
-            // Nicht auf Startposition, nicht auf Zielreihe/-spalte, nicht doppelt
+            // Nicht auf Startposition, nicht direkt neben Start, nicht auf Zielreihe/-spalte
             const isStart = (x === this.player.x && y === this.player.y);
+            const isNextToStart = Math.abs(x - this.player.x) <= 1 && Math.abs(y - this.player.y) <= 1;
             const isGoalArea = isMobile ? (y === 0) : (x === this.cols - 1);
             const isStartArea = isMobile ? (y === this.rows - 1) : (x === 0);
 
-            if (!isStart && !isGoalArea && !isStartArea && !this.grid[y][x].isEnemy) {
+            if (!isStart && !isNextToStart && !isGoalArea && !isStartArea && !this.grid[y][x].isEnemy) {
                 this.grid[y][x].isEnemy = true;
                 placed++;
             }
@@ -244,6 +245,9 @@ const Game = {
 
         // Nachbar-Zahlen berechnen
         this.calculateAdjacentEnemies();
+
+        // Startfeld und direkte Nachbarn aufdecken
+        this.revealAroundPlayer();
 
         this.updateUI();
         this.render();
@@ -266,6 +270,25 @@ const Game = {
                     }
                     this.grid[y][x].adjacentEnemies = count;
                 }
+            }
+        }
+    },
+
+    revealAroundPlayer() {
+        // Spielerfeld und alle 4 direkten Nachbarn aufdecken
+        const directions = [
+            { dx: 0, dy: 0 },   // Spielerfeld selbst
+            { dx: 0, dy: -1 },  // oben
+            { dx: 0, dy: 1 },   // unten
+            { dx: -1, dy: 0 },  // links
+            { dx: 1, dy: 0 }    // rechts
+        ];
+
+        for (const { dx, dy } of directions) {
+            const nx = this.player.x + dx;
+            const ny = this.player.y + dy;
+            if (nx >= 0 && nx < this.cols && ny >= 0 && ny < this.rows) {
+                this.grid[ny][nx].revealed = true;
             }
         }
     },
