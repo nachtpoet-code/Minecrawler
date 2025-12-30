@@ -57,14 +57,17 @@ const Game = {
             this.rows = 7;
         }
 
-        // Zellengroesse berechnen
-        const maxWidth = gameArea.clientWidth - 40;
-        const maxHeight = gameArea.clientHeight - 40;
+        // Zellengroesse berechnen - Fallback wenn Layout noch nicht fertig
+        const maxWidth = Math.max(gameArea.clientWidth - 40, 200);
+        const maxHeight = Math.max(gameArea.clientHeight - 40, 300);
 
-        this.cellSize = Math.min(
-            Math.floor(maxWidth / this.cols),
-            Math.floor(maxHeight / this.rows),
-            60 // Max Zellengröße
+        this.cellSize = Math.max(
+            20, // Minimum Zellengröße
+            Math.min(
+                Math.floor(maxWidth / this.cols),
+                Math.floor(maxHeight / this.rows),
+                60 // Max Zellengröße
+            )
         );
 
         this.canvas.width = this.cols * this.cellSize;
@@ -268,6 +271,8 @@ const Game = {
     },
 
     render() {
+        if (!this.grid.length || !this.grid[0]) return; // Guard: Grid muss existieren
+
         const ctx = this.ctx;
         const size = this.cellSize;
 
