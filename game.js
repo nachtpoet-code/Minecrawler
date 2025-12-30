@@ -1,0 +1,414 @@
+// Minecrawler - Ein Minesweeper-Roguelike
+
+const Game = {
+    // Canvas & Rendering
+    canvas: null,
+    ctx: null,
+
+    // Grid Configuration
+    cols: 10,
+    rows: 8,
+    cellSize: 50,
+
+    // Game State
+    grid: [],
+    player: { x: 0, y: 0 },
+    level: 1,
+    gameOver: false,
+    levelComplete: false,
+
+    // Difficulty scaling
+    baseEnemyDensity: 0.15,
+
+    // Colors
+    colors: {
+        hidden: '#1a1a2e',
+        revealed: '#252540',
+        player: '#00ff88',
+        enemy: '#ff3344',
+        goal: '#00ccff',
+        border: '#333355',
+        text: '#e0e0e0',
+        numbers: ['#00ff88', '#00ccff', '#ffcc00', '#ff8800', '#ff3344', '#ff00ff', '#ffffff', '#888888']
+    },
+
+    init() {
+        this.canvas = document.getElementById('game-canvas');
+        this.ctx = this.canvas.getContext('2d');
+
+        this.setupEventListeners();
+        this.handleResize();
+        this.startNewGame();
+
+        window.addEventListener('resize', () => this.handleResize());
+    },
+
+    handleResize() {
+        const gameArea = document.getElementById('game-area');
+        const isMobile = window.innerWidth <= 768 && window.innerHeight > window.innerWidth;
+
+        // Auf Mobilgeräten: vertikales Layout (mehr Reihen als Spalten)
+        if (isMobile) {
+            this.cols = 6;
+            this.rows = 10;
+        } else {
+            // Desktop: horizontales Layout
+            this.cols = 12;
+            this.rows = 7;
+        }
+
+        // Zellengroesse berechnen
+        const maxWidth = gameArea.clientWidth - 40;
+        const maxHeight = gameArea.clientHeight - 40;
+
+        this.cellSize = Math.min(
+            Math.floor(maxWidth / this.cols),
+            Math.floor(maxHeight / this.rows),
+            60 // Max Zellengröße
+        );
+
+        this.canvas.width = this.cols * this.cellSize;
+        this.canvas.height = this.rows * this.cellSize;
+
+        this.render();
+    },
+
+    setupEventListeners() {
+        // Click/Touch auf Canvas
+        this.canvas.addEventListener('click', (e) => this.handleClick(e));
+        this.canvas.addEventListener('touchend', (e) => {
+            e.preventDefault();
+            const touch = e.changedTouches[0];
+            this.handleClick(touch);
+        });
+
+        // Keyboard
+        document.addEventListener('keydown', (e) => this.handleKeyboard(e));
+
+        // Buttons
+        document.getElementById('restart-btn').addEventListener('click', () => this.startNewGame());
+        document.getElementById('next-level-btn').addEventListener('click', () => this.nextLevel());
+    },
+
+    handleClick(e) {
+        if (this.gameOver || this.levelComplete) return;
+
+        const rect = this.canvas.getBoundingClientRect();
+        const x = Math.floor((e.clientX - rect.left) / this.cellSize);
+        const y = Math.floor((e.clientY - rect.top) / this.cellSize);
+
+        this.tryMove(x, y);
+    },
+
+    handleKeyboard(e) {
+        if (this.gameOver || this.levelComplete) return;
+
+        const moves = {
+            'ArrowUp': { dx: 0, dy: -1 },
+            'ArrowDown': { dx: 0, dy: 1 },
+            'ArrowLeft': { dx: -1, dy: 0 },
+            'ArrowRight': { dx: 1, dy: 0 },
+            'w': { dx: 0, dy: -1 },
+            's': { dx: 0, dy: 1 },
+            'a': { dx: -1, dy: 0 },
+            'd': { dx: 1, dy: 0 }
+        };
+
+        if (moves[e.key]) {
+            const { dx, dy } = moves[e.key];
+            this.tryMove(this.player.x + dx, this.player.y + dy);
+        }
+    },
+
+    tryMove(x, y) {
+        // Prüfen ob Ziel ein Nachbarfeld ist
+        const dx = Math.abs(x - this.player.x);
+        const dy = Math.abs(y - this.player.y);
+
+        if ((dx === 1 && dy === 0) || (dx === 0 && dy === 1)) {
+            // Nur horizontale/vertikale Bewegung (keine Diagonale)
+            if (x >= 0 && x < this.cols && y >= 0 && y < this.rows) {
+                this.movePlayer(x, y);
+            }
+        }
+    },
+
+    movePlayer(x, y) {
+        const cell = this.grid[y][x];
+        cell.revealed = true;
+
+        if (cell.isEnemy) {
+            // Game Over!
+            this.player.x = x;
+            this.player.y = y;
+            this.gameOver = true;
+            this.render();
+            this.showGameOver();
+            return;
+        }
+
+        this.player.x = x;
+        this.player.y = y;
+
+        // Ziel erreicht?
+        if (this.isGoal(x, y)) {
+            this.levelComplete = true;
+            this.render();
+            this.showLevelComplete();
+            return;
+        }
+
+        this.render();
+    },
+
+    isGoal(x, y) {
+        const isMobile = window.innerWidth <= 768 && window.innerHeight > window.innerWidth;
+        if (isMobile) {
+            // Mobil: Ziel ist oben
+            return y === 0;
+        } else {
+            // Desktop: Ziel ist rechts
+            return x === this.cols - 1;
+        }
+    },
+
+    startNewGame() {
+        this.level = 1;
+        this.hideOverlays();
+        this.handleResize();
+        this.generateLevel();
+    },
+
+    nextLevel() {
+        this.level++;
+        this.hideOverlays();
+        this.generateLevel();
+    },
+
+    generateLevel() {
+        this.gameOver = false;
+        this.levelComplete = false;
+        this.grid = [];
+
+        const isMobile = window.innerWidth <= 768 && window.innerHeight > window.innerWidth;
+
+        // Spieler-Startposition
+        if (isMobile) {
+            // Mobil: unten Mitte
+            this.player.x = Math.floor(this.cols / 2);
+            this.player.y = this.rows - 1;
+        } else {
+            // Desktop: links Mitte
+            this.player.x = 0;
+            this.player.y = Math.floor(this.rows / 2);
+        }
+
+        // Grid initialisieren
+        for (let y = 0; y < this.rows; y++) {
+            this.grid[y] = [];
+            for (let x = 0; x < this.cols; x++) {
+                this.grid[y][x] = {
+                    isEnemy: false,
+                    revealed: false,
+                    adjacentEnemies: 0
+                };
+            }
+        }
+
+        // Startfeld aufdecken
+        this.grid[this.player.y][this.player.x].revealed = true;
+
+        // Feinde platzieren
+        const enemyDensity = this.baseEnemyDensity + (this.level - 1) * 0.02;
+        const totalCells = this.cols * this.rows;
+        const numEnemies = Math.floor(totalCells * Math.min(enemyDensity, 0.35));
+
+        let placed = 0;
+        while (placed < numEnemies) {
+            const x = Math.floor(Math.random() * this.cols);
+            const y = Math.floor(Math.random() * this.rows);
+
+            // Nicht auf Startposition, nicht auf Zielreihe/-spalte, nicht doppelt
+            const isStart = (x === this.player.x && y === this.player.y);
+            const isGoalArea = isMobile ? (y === 0) : (x === this.cols - 1);
+            const isStartArea = isMobile ? (y === this.rows - 1) : (x === 0);
+
+            if (!isStart && !isGoalArea && !isStartArea && !this.grid[y][x].isEnemy) {
+                this.grid[y][x].isEnemy = true;
+                placed++;
+            }
+        }
+
+        // Nachbar-Zahlen berechnen
+        this.calculateAdjacentEnemies();
+
+        this.updateUI();
+        this.render();
+    },
+
+    calculateAdjacentEnemies() {
+        for (let y = 0; y < this.rows; y++) {
+            for (let x = 0; x < this.cols; x++) {
+                if (!this.grid[y][x].isEnemy) {
+                    let count = 0;
+                    for (let dy = -1; dy <= 1; dy++) {
+                        for (let dx = -1; dx <= 1; dx++) {
+                            if (dx === 0 && dy === 0) continue;
+                            const nx = x + dx;
+                            const ny = y + dy;
+                            if (nx >= 0 && nx < this.cols && ny >= 0 && ny < this.rows) {
+                                if (this.grid[ny][nx].isEnemy) count++;
+                            }
+                        }
+                    }
+                    this.grid[y][x].adjacentEnemies = count;
+                }
+            }
+        }
+    },
+
+    render() {
+        const ctx = this.ctx;
+        const size = this.cellSize;
+
+        ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
+
+        const isMobile = window.innerWidth <= 768 && window.innerHeight > window.innerWidth;
+
+        for (let y = 0; y < this.rows; y++) {
+            for (let x = 0; x < this.cols; x++) {
+                const cell = this.grid[y][x];
+                const px = x * size;
+                const py = y * size;
+
+                // Zellhintergrund
+                if (this.isGoal(x, y)) {
+                    ctx.fillStyle = this.colors.goal;
+                    ctx.globalAlpha = 0.3;
+                    ctx.fillRect(px, py, size, size);
+                    ctx.globalAlpha = 1;
+                } else if (cell.revealed) {
+                    ctx.fillStyle = this.colors.revealed;
+                    ctx.fillRect(px, py, size, size);
+                } else {
+                    ctx.fillStyle = this.colors.hidden;
+                    ctx.fillRect(px, py, size, size);
+                }
+
+                // Zellrand
+                ctx.strokeStyle = this.colors.border;
+                ctx.lineWidth = 1;
+                ctx.strokeRect(px, py, size, size);
+
+                // Zellinhalt
+                if (cell.revealed && !cell.isEnemy && cell.adjacentEnemies > 0) {
+                    // Zahl anzeigen
+                    ctx.fillStyle = this.colors.numbers[cell.adjacentEnemies - 1];
+                    ctx.font = `bold ${size * 0.5}px 'Courier New'`;
+                    ctx.textAlign = 'center';
+                    ctx.textBaseline = 'middle';
+                    ctx.fillText(cell.adjacentEnemies, px + size / 2, py + size / 2);
+                }
+
+                // Feind anzeigen (nur wenn aufgedeckt = Game Over)
+                if (cell.revealed && cell.isEnemy) {
+                    ctx.fillStyle = this.colors.enemy;
+                    ctx.beginPath();
+                    ctx.arc(px + size / 2, py + size / 2, size * 0.3, 0, Math.PI * 2);
+                    ctx.fill();
+
+                    // X für Feind
+                    ctx.strokeStyle = '#000';
+                    ctx.lineWidth = 2;
+                    const offset = size * 0.15;
+                    ctx.beginPath();
+                    ctx.moveTo(px + size / 2 - offset, py + size / 2 - offset);
+                    ctx.lineTo(px + size / 2 + offset, py + size / 2 + offset);
+                    ctx.moveTo(px + size / 2 + offset, py + size / 2 - offset);
+                    ctx.lineTo(px + size / 2 - offset, py + size / 2 + offset);
+                    ctx.stroke();
+                }
+
+                // Spieler
+                if (x === this.player.x && y === this.player.y && !this.gameOver) {
+                    ctx.fillStyle = this.colors.player;
+                    ctx.beginPath();
+                    ctx.arc(px + size / 2, py + size / 2, size * 0.35, 0, Math.PI * 2);
+                    ctx.fill();
+
+                    // Spieler-Richtungsindikator
+                    ctx.fillStyle = '#000';
+                    ctx.beginPath();
+                    if (isMobile) {
+                        // Pfeil nach oben
+                        ctx.moveTo(px + size / 2, py + size * 0.25);
+                        ctx.lineTo(px + size * 0.35, py + size * 0.55);
+                        ctx.lineTo(px + size * 0.65, py + size * 0.55);
+                    } else {
+                        // Pfeil nach rechts
+                        ctx.moveTo(px + size * 0.7, py + size / 2);
+                        ctx.lineTo(px + size * 0.4, py + size * 0.35);
+                        ctx.lineTo(px + size * 0.4, py + size * 0.65);
+                    }
+                    ctx.closePath();
+                    ctx.fill();
+                }
+
+                // Ziel-Markierung
+                if (this.isGoal(x, y)) {
+                    ctx.strokeStyle = this.colors.goal;
+                    ctx.lineWidth = 3;
+                    ctx.strokeRect(px + 3, py + 3, size - 6, size - 6);
+                }
+            }
+        }
+
+        // Mögliche Züge hervorheben
+        if (!this.gameOver && !this.levelComplete) {
+            const moves = [
+                { dx: 0, dy: -1 },
+                { dx: 0, dy: 1 },
+                { dx: -1, dy: 0 },
+                { dx: 1, dy: 0 }
+            ];
+
+            for (const { dx, dy } of moves) {
+                const nx = this.player.x + dx;
+                const ny = this.player.y + dy;
+
+                if (nx >= 0 && nx < this.cols && ny >= 0 && ny < this.rows) {
+                    const px = nx * size;
+                    const py = ny * size;
+
+                    ctx.strokeStyle = this.colors.player;
+                    ctx.lineWidth = 2;
+                    ctx.setLineDash([5, 5]);
+                    ctx.strokeRect(px + 2, py + 2, size - 4, size - 4);
+                    ctx.setLineDash([]);
+                }
+            }
+        }
+    },
+
+    updateUI() {
+        document.getElementById('level-display').textContent = `Level ${this.level}`;
+    },
+
+    showGameOver() {
+        document.getElementById('game-over-screen').classList.remove('hidden');
+    },
+
+    showLevelComplete() {
+        document.getElementById('level-complete-message').textContent =
+            `Level ${this.level} geschafft! Bereit für mehr Gefahr?`;
+        document.getElementById('level-complete-screen').classList.remove('hidden');
+    },
+
+    hideOverlays() {
+        document.getElementById('game-over-screen').classList.add('hidden');
+        document.getElementById('level-complete-screen').classList.add('hidden');
+    }
+};
+
+// Start
+document.addEventListener('DOMContentLoaded', () => Game.init());

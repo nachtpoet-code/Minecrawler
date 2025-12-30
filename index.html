@@ -1,0 +1,46 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>Minecrawler</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div id="game-container">
+        <header id="game-header">
+            <h1>MINECRAWLER</h1>
+            <div id="stats">
+                <span id="level-display">Level 1</span>
+                <span id="inventory-display"></span>
+            </div>
+        </header>
+
+        <main id="game-area">
+            <canvas id="game-canvas"></canvas>
+        </main>
+
+        <div id="game-over-screen" class="overlay hidden">
+            <div class="overlay-content">
+                <h2 id="game-over-title">ENTDECKT!</h2>
+                <p id="game-over-message">Du wurdest von einem Feind entdeckt.</p>
+                <button id="restart-btn">Neuer Versuch</button>
+            </div>
+        </div>
+
+        <div id="level-complete-screen" class="overlay hidden">
+            <div class="overlay-content">
+                <h2>GESCHAFFT!</h2>
+                <p id="level-complete-message">Du hast die feindlichen Linien durchbrochen.</p>
+                <button id="next-level-btn">Weiter</button>
+            </div>
+        </div>
+
+        <footer id="game-footer">
+            <p>Finde den Weg durch die feindlichen Linien</p>
+        </footer>
+    </div>
+
+    <script src="game.js"></script>
+</body>
+</html>
