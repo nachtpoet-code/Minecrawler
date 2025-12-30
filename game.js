@@ -180,14 +180,39 @@ const Game = {
         const cell = this.grid[y][x];
         cell.revealed = true;
 
-        if (cell.isEnemy && !cell.smoked) {
-            // Game Over - Feind nicht abgelenkt!
+        // 1. Gegner-Feld direkt betreten = IMMER Game Over (Granate hilft nicht)
+        if (cell.isEnemy) {
             this.player.x = x;
             this.player.y = y;
             this.gameOver = true;
             this.render();
             this.showGameOver();
             return;
+        }
+
+        // 2. Prüfen ob ein nicht-umnebelter Gegner das Feld sieht (horizontal/vertikal)
+        const directions = [
+            { dx: 0, dy: -1 },  // oben
+            { dx: 0, dy: 1 },   // unten
+            { dx: -1, dy: 0 },  // links
+            { dx: 1, dy: 0 }    // rechts
+        ];
+
+        for (const { dx, dy } of directions) {
+            const nx = x + dx;
+            const ny = y + dy;
+            if (nx >= 0 && nx < this.cols && ny >= 0 && ny < this.rows) {
+                const neighbor = this.grid[ny][nx];
+                if (neighbor.isEnemy && !neighbor.smoked) {
+                    // Entdeckt von einem wachen Gegner!
+                    this.player.x = x;
+                    this.player.y = y;
+                    this.gameOver = true;
+                    this.render();
+                    this.showGameOver();
+                    return;
+                }
+            }
         }
 
         this.player.x = x;
