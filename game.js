@@ -16,10 +16,15 @@ const Game = {
     level: 1,
     gameOver: false,
     levelComplete: false,
+    detectedBy: null, // Position des Gegners, der den Spieler entdeckt hat
 
     // Rauchgranaten
     smokeGrenades: 3,
-    smokeMode: false, // true = nächster Klick wirft Granate
+    smokeMode: false,
+
+    // Long Press für Markierung
+    longPressTimer: null,
+    longPressDelay: 500,
 
     // Difficulty scaling
     baseEnemyDensity: 0.15,
@@ -34,6 +39,7 @@ const Game = {
         border: '#333355',
         text: '#e0e0e0',
         smoke: '#8855ff',
+        flagged: '#ff8800',
         numbers: ['#00ff88', '#00ccff', '#ffcc00', '#ff8800', '#ff3344', '#ff00ff', '#ffffff', '#888888']
     },
 
@@ -82,12 +88,34 @@ const Game = {
     },
 
     setupEventListeners() {
-        // Click/Touch auf Canvas
+        // Click auf Canvas
         this.canvas.addEventListener('click', (e) => this.handleClick(e));
+
+        // Rechtsklick für Markierung
+        this.canvas.addEventListener('contextmenu', (e) => {
+            e.preventDefault();
+            this.handleRightClick(e);
+        });
+
+        // Touch Events für Long Press
+        this.canvas.addEventListener('touchstart', (e) => {
+            const touch = e.touches[0];
+            this.startLongPress(touch);
+        });
         this.canvas.addEventListener('touchend', (e) => {
             e.preventDefault();
-            const touch = e.changedTouches[0];
-            this.handleClick(touch);
+            if (this.longPressTimer) {
+                clearTimeout(this.longPressTimer);
+                this.longPressTimer = null;
+                const touch = e.changedTouches[0];
+                this.handleClick(touch);
+            }
+        });
+        this.canvas.addEventListener('touchmove', () => {
+            if (this.longPressTimer) {
+                clearTimeout(this.longPressTimer);
+                this.longPressTimer = null;
+            }
         });
 
         // Keyboard
@@ -99,6 +127,38 @@ const Game = {
 
         // Smoke Button
         document.getElementById('smoke-btn').addEventListener('click', () => this.toggleSmokeMode());
+    },
+
+    startLongPress(touch) {
+        const rect = this.canvas.getBoundingClientRect();
+        const x = Math.floor((touch.clientX - rect.left) / this.cellSize);
+        const y = Math.floor((touch.clientY - rect.top) / this.cellSize);
+
+        this.longPressTimer = setTimeout(() => {
+            this.toggleFlag(x, y);
+            this.longPressTimer = null;
+        }, this.longPressDelay);
+    },
+
+    handleRightClick(e) {
+        if (this.gameOver || this.levelComplete) return;
+
+        const rect = this.canvas.getBoundingClientRect();
+        const x = Math.floor((e.clientX - rect.left) / this.cellSize);
+        const y = Math.floor((e.clientY - rect.top) / this.cellSize);
+
+        this.toggleFlag(x, y);
+    },
+
+    toggleFlag(x, y) {
+        if (x < 0 || x >= this.cols || y < 0 || y >= this.rows) return;
+        if (this.gameOver || this.levelComplete) return;
+
+        const cell = this.grid[y][x];
+        if (cell.revealed) return; // Aufgedeckte Felder nicht markieren
+
+        cell.flagged = !cell.flagged;
+        this.render();
     },
 
     toggleSmokeMode() {
@@ -129,6 +189,7 @@ const Game = {
         if (cell.smoked) return; // Bereits verräuchert
 
         cell.smoked = true;
+        cell.revealed = true; // Rauch deckt das Feld auf (zeigt Gegner!)
         this.smokeGrenades--;
         this.smokeMode = false;
 
@@ -180,13 +241,12 @@ const Game = {
         const cell = this.grid[y][x];
         cell.revealed = true;
 
-        // 1. Gegner-Feld direkt betreten = IMMER Game Over (Granate hilft nicht)
+        // 1. Gegner-Feld direkt betreten = IMMER Game Over
         if (cell.isEnemy) {
             this.player.x = x;
             this.player.y = y;
-            this.gameOver = true;
-            this.render();
-            this.showGameOver();
+            this.detectedBy = { x, y }; // Der Gegner selbst
+            this.triggerGameOver();
             return;
         }
 
@@ -207,9 +267,8 @@ const Game = {
                     // Entdeckt von einem wachen Gegner!
                     this.player.x = x;
                     this.player.y = y;
-                    this.gameOver = true;
-                    this.render();
-                    this.showGameOver();
+                    this.detectedBy = { x: nx, y: ny }; // Position des Gegners
+                    this.triggerGameOver();
                     return;
                 }
             }
@@ -230,6 +289,22 @@ const Game = {
         }
 
         this.render();
+    },
+
+    triggerGameOver() {
+        this.gameOver = true;
+
+        // Gegner aufdecken der den Spieler entdeckt hat
+        if (this.detectedBy) {
+            this.grid[this.detectedBy.y][this.detectedBy.x].revealed = true;
+        }
+
+        this.render();
+
+        // Kurze Verzögerung damit Spieler den Gegner sieht
+        setTimeout(() => {
+            this.showGameOver();
+        }, 800);
     },
 
     isGoal(x, y) {
@@ -259,6 +334,7 @@ const Game = {
     generateLevel() {
         this.gameOver = false;
         this.levelComplete = false;
+        this.detectedBy = null;
         this.grid = [];
         this.smokeGrenades = 3;
         this.smokeMode = false;
@@ -285,7 +361,8 @@ const Game = {
                     isEnemy: false,
                     revealed: false,
                     adjacentEnemies: 0,
-                    smoked: false
+                    smoked: false,
+                    flagged: false
                 };
             }
         }
@@ -410,6 +487,15 @@ const Game = {
                     ctx.textAlign = 'center';
                     ctx.textBaseline = 'middle';
                     ctx.fillText('💨', px + size / 2, py + size / 2);
+                }
+
+                // Flaggen-Markierung (vermuteter Gegner)
+                if (cell.flagged && !cell.revealed) {
+                    ctx.fillStyle = this.colors.flagged;
+                    ctx.font = `${size * 0.5}px Arial`;
+                    ctx.textAlign = 'center';
+                    ctx.textBaseline = 'middle';
+                    ctx.fillText('⚠️', px + size / 2, py + size / 2);
                 }
 
                 // Zellinhalt
