@@ -17,6 +17,10 @@ const Game = {
     gameOver: false,
     levelComplete: false,
 
+    // Rauchgranaten
+    smokeGrenades: 3,
+    smokeMode: false, // true = nächster Klick wirft Granate
+
     // Difficulty scaling
     baseEnemyDensity: 0.15,
 
@@ -29,6 +33,7 @@ const Game = {
         goal: '#00ccff',
         border: '#333355',
         text: '#e0e0e0',
+        smoke: '#8855ff',
         numbers: ['#00ff88', '#00ccff', '#ffcc00', '#ff8800', '#ff3344', '#ff00ff', '#ffffff', '#888888']
     },
 
@@ -91,6 +96,15 @@ const Game = {
         // Buttons
         document.getElementById('restart-btn').addEventListener('click', () => this.startNewGame());
         document.getElementById('next-level-btn').addEventListener('click', () => this.nextLevel());
+
+        // Smoke Button
+        document.getElementById('smoke-btn').addEventListener('click', () => this.toggleSmokeMode());
+    },
+
+    toggleSmokeMode() {
+        if (this.smokeGrenades <= 0) return;
+        this.smokeMode = !this.smokeMode;
+        document.getElementById('smoke-btn').classList.toggle('active', this.smokeMode);
     },
 
     handleClick(e) {
@@ -100,11 +114,37 @@ const Game = {
         const x = Math.floor((e.clientX - rect.left) / this.cellSize);
         const y = Math.floor((e.clientY - rect.top) / this.cellSize);
 
-        this.tryMove(x, y);
+        if (this.smokeMode) {
+            this.throwSmoke(x, y);
+        } else {
+            this.tryMove(x, y);
+        }
+    },
+
+    throwSmoke(x, y) {
+        if (x < 0 || x >= this.cols || y < 0 || y >= this.rows) return;
+        if (this.smokeGrenades <= 0) return;
+
+        const cell = this.grid[y][x];
+        if (cell.smoked) return; // Bereits verräuchert
+
+        cell.smoked = true;
+        this.smokeGrenades--;
+        this.smokeMode = false;
+
+        document.getElementById('smoke-btn').classList.remove('active');
+        this.updateUI();
+        this.render();
     },
 
     handleKeyboard(e) {
         if (this.gameOver || this.levelComplete) return;
+
+        // Q für Rauchgranaten-Modus
+        if (e.key === 'q' || e.key === 'Q') {
+            this.toggleSmokeMode();
+            return;
+        }
 
         const moves = {
             'ArrowUp': { dx: 0, dy: -1 },
@@ -140,8 +180,8 @@ const Game = {
         const cell = this.grid[y][x];
         cell.revealed = true;
 
-        if (cell.isEnemy) {
-            // Game Over!
+        if (cell.isEnemy && !cell.smoked) {
+            // Game Over - Feind nicht abgelenkt!
             this.player.x = x;
             this.player.y = y;
             this.gameOver = true;
@@ -195,6 +235,9 @@ const Game = {
         this.gameOver = false;
         this.levelComplete = false;
         this.grid = [];
+        this.smokeGrenades = 3;
+        this.smokeMode = false;
+        document.getElementById('smoke-btn').classList.remove('active');
 
         const isMobile = window.innerWidth <= 768 && window.innerHeight > window.innerWidth;
 
@@ -216,7 +259,8 @@ const Game = {
                 this.grid[y][x] = {
                     isEnemy: false,
                     revealed: false,
-                    adjacentEnemies: 0
+                    adjacentEnemies: 0,
+                    smoked: false
                 };
             }
         }
@@ -328,6 +372,21 @@ const Game = {
                 ctx.lineWidth = 1;
                 ctx.strokeRect(px, py, size, size);
 
+                // Rauchgranate-Markierung
+                if (cell.smoked) {
+                    ctx.fillStyle = this.colors.smoke;
+                    ctx.globalAlpha = 0.4;
+                    ctx.fillRect(px + 4, py + 4, size - 8, size - 8);
+                    ctx.globalAlpha = 1;
+
+                    // Rauch-Symbol
+                    ctx.fillStyle = this.colors.smoke;
+                    ctx.font = `${size * 0.4}px Arial`;
+                    ctx.textAlign = 'center';
+                    ctx.textBaseline = 'middle';
+                    ctx.fillText('💨', px + size / 2, py + size / 2);
+                }
+
                 // Zellinhalt
                 if (cell.revealed && !cell.isEnemy && cell.adjacentEnemies > 0) {
                     // Zahl anzeigen
@@ -420,6 +479,10 @@ const Game = {
 
     updateUI() {
         document.getElementById('level-display').textContent = `Level ${this.level}`;
+        document.getElementById('smoke-count').textContent = this.smokeGrenades;
+
+        const smokeBtn = document.getElementById('smoke-btn');
+        smokeBtn.disabled = this.smokeGrenades <= 0;
     },
 
     showGameOver() {
